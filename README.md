@@ -28,20 +28,24 @@ No external charting library is used: the timeline widget is a hand-rolled
 - **Compact mode** (▭ Compact toggle): one vertical panel per GPU —
   name, P-state and throttle status on top, then GPU load, power,
   temperature, VRAM, fan speed, memory temperature, SM clock, memory clock
-   and PCIe bus throughput stacked one below the other, each value above a
+  and PCIe bus throughput stacked one below the other, each value above a
   small inline sparkline (30 px) that follows the chosen timeline window.
   No cards, charts or process table; the window shrinks to fit.
   Sparklines are seeded from the big charts' history, so the full timeline
   is visible the moment you switch. The top bar collapses to
-  title + icon buttons
+  title + icon buttons. Which metric rows are shown can be toggled in the
+  controls dialog
 - **Stay on top** (📌 Top toggle): keeps the window above all others
 - **Controls dialog** (☰ Controls): refresh interval (0.5–10 s),
   timeline window, **chart style** (filled area / plain line, applied to
-  both the big timeline charts and the compact sparklines), pause/resume
-  and **CSV export** of the full in-memory history — in a small non-modal
+  both the big timeline charts and the compact sparklines), pause/resume,
+  **CSV export** of the full in-memory history, and a "Compact mode rows"
+  checkbox group to show/hide any compact-panel metric (applied live,
+  remembered between launches) — in a small non-modal
   dialog
 - **State persistence**: window geometry, splitter sizes, refresh interval,
-  timeline window, chart style, compact mode and always-on-top are saved
+  timeline window, chart style, compact mode, its visible rows and
+  always-on-top are saved
   to an INI file
   (`QSettings`, on Windows:
   `%APPDATA%\GPUMonitor\GPUMonitor.ini`) and restored on the next launch
@@ -82,6 +86,18 @@ stays empty.
 ```bash
 python main.py
 ```
+
+## Build a standalone EXE
+
+```bat
+build_standalone.bat
+```
+
+Uses Nuitka (`--standalone --onefile`, PySide6 plugin, no console) with the
+MSVC toolchain from Visual Studio 2022 (imported via `vcvars64`). Produces
+`build\gpumon.exe` — a single file that runs on any Windows machine without
+Python. First build takes several minutes; the script reinstalls the Nuitka
+build dependencies (`nuitka`, `ordered-set`, `zstandard`) if missing.
 
 ## Project layout
 

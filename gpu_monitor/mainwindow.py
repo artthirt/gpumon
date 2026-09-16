@@ -189,7 +189,10 @@ class MainWindow(QMainWindow):
             lambda msg: self.statusBar().showMessage(f"⚠ {msg}"))
         self.sampler.start()
 
+        self._restoring = False
         self.dlg = ControlsDialog(self)
+        for cb in self.dlg.row_checks.values():
+            cb.stateChanged.connect(self._on_row_toggle)
         self.dlg.cmb_interval.setCurrentIndex(1)
         self.dlg.cmb_window.setCurrentIndex(1)
         self.dlg.cmb_interval.currentIndexChanged.connect(self._on_interval)
@@ -446,6 +449,7 @@ class MainWindow(QMainWindow):
                 for t, v in src.points:
                     spark.push(t, v)
         row.set_spark_style(self.dlg.cmb_chart_style.currentData())
+        row.apply_row_visibility(self.dlg.row_visibility())
         row.set_sample(s)
         self.compact_layout.insertWidget(len(self._rows) - 1, row)
         self._rows[i] = row
@@ -466,14 +470,7 @@ class MainWindow(QMainWindow):
                 self._ensure_row(i, s)
             self.compact_box.show()
             self.updateGeometry()
-            n = max(1, sum(1 for r in self._rows if r is not None))
-            ph = max((r.sizeHint().height()
-                      for r in self._rows if r is not None), default=300)
-            # defer so Qt recomputes the layout's minimum width first;
-            # a synchronous resize would be clamped to the stale minimum
-            target = (GpuPanel.WIDTH + 60, n * (ph + 10) + 130)
-            QTimer.singleShot(
-                100, lambda: self._compact and self.resize(*target))
+            self._fit_compact()
             self._save_state()
         else:
             self.lbl_info.setVisible(True)
@@ -486,6 +483,19 @@ class MainWindow(QMainWindow):
             if self._normal_geo is not None:
                 self.restoreGeometry(self._normal_geo)
             self._save_state()
+
+    def _fit_compact(self) -> None:
+        """Resize the window to fit the visible compact panels.
+
+        Deferred so Qt recomputes the layout's minimum width first; a
+        synchronous resize would be clamped to the stale minimum.
+        """
+        n = max(1, sum(1 for r in self._rows if r is not None))
+        ph = max((r.sizeHint().height()
+                  for r in self._rows if r is not None), default=300)
+        target = (GpuPanel.WIDTH + 60, n * (ph + 10) + 130)
+        QTimer.singleShot(
+            100, lambda: self._compact and self.resize(*target))
 
     def _on_top(self, on: bool) -> None:
         self.setWindowFlag(Qt.WindowStaysOnTopHint, on)
@@ -517,6 +527,19 @@ class MainWindow(QMainWindow):
         for row in self._rows:
             if row is not None:
                 row.set_spark_style(style)
+
+    @Slot(int)
+    def _on_row_toggle(self, _state: int) -> None:
+        """A compact-mode row checkbox changed — apply to all panels."""
+        if self._restoring:
+            return
+        vis = self.dlg.row_visibility()
+        for row in self._rows:
+            if row is not None:
+                row.apply_row_visibility(vis)
+        if self._compact:
+            self._fit_compact()
+        self._save_state()
 
     def _on_pause(self, checked: bool) -> None:
         self.sampler.set_paused(checked)
@@ -571,6 +594,7 @@ class MainWindow(QMainWindow):
         chart_style = int(s.value("settings/chart_style", 0))
         top = bool(s.value("settings/top", False))
         compact = bool(s.value("settings/compact", False))
+        hidden = list(s.value("settings/compact_hidden", []) or [])
 
         if geom is not None:
             self.restoreGeometry(geom)
@@ -579,10 +603,16 @@ class MainWindow(QMainWindow):
         self.dlg.cmb_interval.setCurrentIndex(interval)
         self.dlg.cmb_window.setCurrentIndex(window)
         self.dlg.cmb_chart_style.setCurrentIndex(chart_style)
-        if top:
-            self.btn_top.setChecked(True)
-        if compact:
-            self.btn_compact.setChecked(True)
+        self._restoring = True
+        try:
+            self.dlg.set_row_visibility(
+                {k: k not in hidden for k in self.dlg.row_checks})
+            if top:
+                self.btn_top.setChecked(True)
+            if compact:
+                self.btn_compact.setChecked(True)
+        finally:
+            self._restoring = False
 
     def _save_state(self) -> None:
         s = self._ini()
@@ -595,6 +625,9 @@ class MainWindow(QMainWindow):
                    self.dlg.cmb_chart_style.currentIndex())
         s.setValue("settings/top", self.btn_top.isChecked())
         s.setValue("settings/compact", self._compact)
+        s.setValue("settings/compact_hidden",
+                   [k for k, v in self.dlg.row_visibility().items()
+                    if not v])
         s.sync()
 
     # ------------------------------------------------------------------- close
