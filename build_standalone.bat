@@ -40,6 +40,8 @@ echo === [3/3] Building standalone one-file EXE (takes several minutes) ===
     --onefile ^
     --enable-plugin=pyside6 ^
     --windows-disable-console ^
+    --windows-icon-from-ico=icon.ico ^
+    --include-data-files=icon.ico=icon.ico ^
     --include-windows-runtime-dlls=yes ^
     --remove-output ^
     --output-filename=gpumon.exe ^
