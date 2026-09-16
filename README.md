@@ -5,8 +5,6 @@ A modern, dark-themed live dashboard for one or more NVIDIA GPUs. It polls
 temperature, VRAM and clocks as interactive timeline charts — plus per-GPU
 status cards and a live process table.
 
-![screenshot](docs/screenshot.png)
-
 No external charting library is used: the timeline widget is a hand-rolled
 `QPainter` implementation, so the only dependency is **PySide6**.
 
