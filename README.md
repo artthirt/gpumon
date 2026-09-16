@@ -87,6 +87,15 @@ stays empty.
 python main.py
 ```
 
+## Icon
+
+The app icon is a GPU chip with a monitoring pulse line, matching the dark
+UI theme. Source: `icon.svg`; the Windows `.ico` (16–256 px) is `icon.ico`
+— used for the window/taskbar icon at runtime and embedded in the EXE by
+the build script. To regenerate the `.ico` after editing the SVG, render it
+to a 256 px PNG and save with PIL:
+`img.save("icon.ico", sizes=[(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)])`.
+
 ## Build a standalone EXE
 
 ```bat
