@@ -1,6 +1,6 @@
 # GPU Monitor (PySide6 + nvidia-smi)
 
-A modern, dark-themed live dashboard for one or more NVIDIA GPUs. It polls
+A modern live dashboard for one or more NVIDIA GPUs (dark or light theme). It polls
 `nvidia-smi` on a background thread and renders GPU load, power draw,
 temperature, VRAM and clocks as interactive timeline charts — plus per-GPU
 status cards and a live process table.
@@ -33,6 +33,9 @@ No external charting library is used: the timeline widget is a hand-rolled
   is visible the moment you switch. The top bar collapses to
   title + icon buttons. Which metric rows are shown can be toggled in the
   controls dialog
+- **Light / dark theme** (Controls → Theme): a full light color scheme
+  alongside the dark one, applied to windows, cards, dialogs and the
+  painted charts; the choice is remembered between launches
 - **Stay on top** (📌 Top toggle): keeps the window above all others
 - **Controls dialog** (☰ Controls): refresh interval (0.5–10 s),
   timeline window, **chart style** (filled area / plain line, applied to
@@ -42,7 +45,7 @@ No external charting library is used: the timeline widget is a hand-rolled
   remembered between launches) — in a small non-modal
   dialog
 - **State persistence**: window geometry, splitter sizes, refresh interval,
-  timeline window, chart style, compact mode, its visible rows and
+  timeline window, chart style, theme, compact mode, its visible rows and
   always-on-top are saved
   to an INI file
   (`QSettings`, on Windows:
@@ -116,6 +119,6 @@ gpu_monitor/
   charts.py              TimeSeriesChart + Sparkline (custom QPainter)
   cards.py               GpuCard / GpuPanel / Bar widgets
   mainwindow.py          window layout, controls dialog, CSV export, INI state
-  theme.py               dark Qt style sheet
+  theme.py               theme palettes + Qt style sheet
 docs/                    nvidia-smi reference docs + screenshot
 ```

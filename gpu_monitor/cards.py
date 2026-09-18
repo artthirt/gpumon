@@ -3,16 +3,15 @@
 from __future__ import annotations
 
 import time
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (QFrame, QGridLayout, QHBoxLayout, QLabel,
                                QSizePolicy, QVBoxLayout, QWidget)
 
+from . import theme
 from .charts import Sparkline
-
-TRACK_COLOR = "#212a38"
 
 
 def fmt_mem(mib: Optional[float]) -> str:
@@ -57,7 +56,7 @@ class Bar(QWidget):
         p.setRenderHint(QPainter.Antialiasing)
         h = self.height()
         p.setPen(Qt.NoPen)
-        p.setBrush(QColor(TRACK_COLOR))
+        p.setBrush(QColor(theme.color("track")))
         p.drawRoundedRect(QRectF(0.5, 0.5, self.width() - 1, h - 1), h / 2, h / 2)
         if self._frac:
             w = max(float(h), self._frac * (self.width() - 1))
@@ -87,7 +86,8 @@ class GpuCard(QFrame):
         dot.setStyleSheet(f"background-color:{accent}; border-radius:5px;")
         self.lbl_name = QLabel("GPU …")
         self.lbl_name.setStyleSheet(
-            "font-weight:600; font-size:12pt; color:#eef2f8; background:transparent;")
+            f"font-weight:600; font-size:12pt; color:{theme.color('card_name')};"
+            " background:transparent;")
         self.lbl_pstate = QLabel("—")
         self.lbl_pstate.setObjectName("badge")
         self.lbl_pstate.setToolTip(
@@ -98,6 +98,13 @@ class GpuCard(QFrame):
         header.addStretch(1)
         header.addWidget(self.lbl_pstate)
         g.addLayout(header, 0, 0, 1, 3)
+
+        # label registries for restyle() (theme switching)
+        self._caps: List[QLabel] = []
+        self._vals: List[QLabel] = []
+        self._stat_caps: List[QLabel] = []
+        self._stat_vals: List[QLabel] = []
+        self._footers: List[QLabel] = []
 
         # ---- metric rows (caption + value, then a bar) --------------------
         self.lbl_util_val = self._metric(
@@ -140,7 +147,30 @@ class GpuCard(QFrame):
         self.lbl_throttle = QLabel("● —")
         self.lbl_throttle.setStyleSheet("background:transparent;")
         self.lbl_throttle.setToolTip("Clock throttle status")
+        self._throttle_reasons: Optional[list] = None  # None = not throttled
         g.addWidget(self.lbl_throttle, 11, 0, 1, 3)
+
+    def restyle(self) -> None:
+        """Re-apply inline label styles from the active theme."""
+        t = theme.color
+        self.lbl_name.setStyleSheet(
+            f"font-weight:600; font-size:12pt; color:{t('card_name')};"
+            " background:transparent;")
+        for w in self._caps:
+            w.setStyleSheet(f"color:{t('muted2')}; background:transparent;")
+        for w in self._vals:
+            w.setStyleSheet(
+                f"font-size:11pt; font-weight:600; color:{t('value_text')};"
+                " background:transparent;")
+        for w in self._stat_caps + self._footers:
+            w.setStyleSheet(f"color:{t('muted3')}; font-size:9pt; background:transparent;")
+        for w in self._stat_vals:
+            w.setStyleSheet(
+                f"font-size:10pt; font-weight:600; color:{t('text')};"
+                " background:transparent;")
+        self._apply_throttle()
+        for bar in (self.bar_util, self.bar_mem, self.bar_pow):
+            bar.update()
 
     # -- builders ------------------------------------------------------------
     def _metric(self, g: QGridLayout, row: int, caption: str,
@@ -148,14 +178,18 @@ class GpuCard(QFrame):
         hb = QHBoxLayout()
         hb.setContentsMargins(0, 0, 0, 0)
         cap = QLabel(caption)
-        cap.setStyleSheet("color:#8b98ad; background:transparent;")
+        cap.setStyleSheet(
+            f"color:{theme.color('muted2')}; background:transparent;")
         cap.setFixedWidth(96)
         val = QLabel("—")
         val.setStyleSheet(
-            "font-size:11pt; font-weight:600; color:#f2f5fa; background:transparent;")
+            f"font-size:11pt; font-weight:600; color:{theme.color('value_text')};"
+            " background:transparent;")
         if tip:
             cap.setToolTip(tip)
             val.setToolTip(tip)
+        self._caps.append(cap)
+        self._vals.append(val)
         hb.addWidget(cap)
         hb.addWidget(val, 1)
         g.addLayout(hb, row, 0, 1, 3)
@@ -170,7 +204,9 @@ class GpuCard(QFrame):
 
     def _stat_caption(self, text: str, tip: str = "") -> QLabel:
         lab = QLabel(text)
-        lab.setStyleSheet("color:#7d8aa0; font-size:9pt; background:transparent;")
+        lab.setStyleSheet(
+            f"color:{theme.color('muted3')}; font-size:9pt; background:transparent;")
+        self._stat_caps.append(lab)
         if tip:
             lab.setToolTip(tip)
         return lab
@@ -178,14 +214,18 @@ class GpuCard(QFrame):
     def _stat_value(self, row: int, col: int, text: str, tip: str = "") -> QLabel:
         lab = QLabel(text)
         lab.setStyleSheet(
-            "font-size:10pt; font-weight:600; color:#dbe2ec; background:transparent;")
+            f"font-size:10pt; font-weight:600; color:{theme.color('text')};"
+            " background:transparent;")
+        self._stat_vals.append(lab)
         if tip:
             lab.setToolTip(tip)
         return lab
 
     def _footer(self, g: QGridLayout, row: int, tip: str = "") -> QLabel:
         lab = QLabel("—")
-        lab.setStyleSheet("color:#7d8aa0; font-size:9pt; background:transparent;")
+        lab.setStyleSheet(
+            f"color:{theme.color('muted3')}; font-size:9pt; background:transparent;")
+        self._footers.append(lab)
         if tip:
             lab.setToolTip(tip)
         g.addWidget(lab, row, 0, 1, 3)
@@ -240,19 +280,25 @@ class GpuCard(QFrame):
         else:
             self.lbl_pcie.setText("—")
 
-        reasons = [r for r in s.throttle_reasons if r != "GPU Idle"]
-        if s.is_throttled:
-            self.lbl_throttle.setText("⚠ " + ", ".join(reasons or ["throttled"]))
-            self.lbl_throttle.setStyleSheet(
-                "color:#fbbf24; font-weight:600; background:transparent;")
-            self.lbl_throttle.setToolTip(
-                "Clocks are being limited: "
-                + (", ".join(reasons) or "throttled"))
-        else:
+        self._throttle_reasons = (
+            [r for r in s.throttle_reasons if r != "GPU Idle"]
+            if s.is_throttled else None)
+        self._apply_throttle()
+
+    def _apply_throttle(self) -> None:
+        t = theme.color
+        if self._throttle_reasons is None:
             self.lbl_throttle.setText("● No throttling")
             self.lbl_throttle.setStyleSheet(
-                "color:#34d399; font-weight:600; background:transparent;")
+                f"color:{t('ok')}; font-weight:600; background:transparent;")
             self.lbl_throttle.setToolTip("No clock throttling active")
+        else:
+            reasons = self._throttle_reasons or ["throttled"]
+            self.lbl_throttle.setText("⚠ " + ", ".join(reasons))
+            self.lbl_throttle.setStyleSheet(
+                f"color:{t('warn')}; font-weight:600; background:transparent;")
+            self.lbl_throttle.setToolTip(
+                "Clocks are being limited: " + ", ".join(reasons))
 
 
 class GpuPanel(QFrame):
@@ -285,7 +331,8 @@ class GpuPanel(QFrame):
         dot.setStyleSheet(f"background-color:{accent}; border-radius:4px;")
         self.lbl_name = QLabel("GPU …")
         self.lbl_name.setStyleSheet(
-            "font-weight:600; font-size:10pt; color:#eef2f8; background:transparent;")
+            f"font-weight:600; font-size:10pt; color:{theme.color('card_name')};"
+            " background:transparent;")
         self.lbl_pstate = QLabel("—")
         self.lbl_pstate.setObjectName("badge")
         self.lbl_pstate.setToolTip(
@@ -293,8 +340,12 @@ class GpuPanel(QFrame):
             "(lower number = higher clocks).")
         self.lbl_throttle = QLabel("●")
         self.lbl_throttle.setStyleSheet(
-            "color:#34d399; font-weight:600; background:transparent;")
+            f"color:{theme.color('ok')}; font-weight:600; background:transparent;")
         self.lbl_throttle.setToolTip("Clock throttle status")
+        self._throttle_reasons: Optional[list] = None
+        # label registries for restyle() (theme switching)
+        self._caps: List[QLabel] = []
+        self._vals: List[QLabel] = []
         header.addWidget(dot)
         header.addWidget(self.lbl_name, 1)
         header.addWidget(self.lbl_pstate)
@@ -361,12 +412,16 @@ class GpuPanel(QFrame):
         hb.setSpacing(6)
         cap = QLabel(caption)
         cap.setFixedWidth(72)
-        cap.setStyleSheet("color:#7d8aa0; font-size:8.5pt; background:transparent;")
+        cap.setStyleSheet(
+            f"color:{theme.color('muted3')}; font-size:8.5pt; background:transparent;")
         val = QLabel("—")
         val.setFixedWidth(76)
         val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         val.setStyleSheet(
-            "font-weight:600; font-size:9.5pt; color:#f2f5fa; background:transparent;")
+            f"font-weight:600; font-size:9.5pt; color:{theme.color('value_text')};"
+            " background:transparent;")
+        self._caps.append(cap)
+        self._vals.append(val)
         if tip:
             for w in (cap, val, spark):
                 w.setToolTip(tip)
@@ -378,6 +433,37 @@ class GpuPanel(QFrame):
         v.addWidget(row)
         v.addSpacing(3)
         return val
+
+    def restyle(self) -> None:
+        """Re-apply inline label styles from the active theme."""
+        t = theme.color
+        self.lbl_name.setStyleSheet(
+            f"font-weight:600; font-size:10pt; color:{t('card_name')};"
+            " background:transparent;")
+        for w in self._caps:
+            w.setStyleSheet(
+                f"color:{t('muted3')}; font-size:8.5pt; background:transparent;")
+        for w in self._vals:
+            w.setStyleSheet(
+                f"font-weight:600; font-size:9.5pt; color:{t('value_text')};"
+                " background:transparent;")
+        self._apply_throttle()
+        for sp in self._all_sparks:
+            sp.update()
+
+    def _apply_throttle(self) -> None:
+        t = theme.color
+        if self._throttle_reasons is None:
+            self.lbl_throttle.setText("●")
+            self.lbl_throttle.setStyleSheet(
+                f"color:{t('ok')}; background:transparent;")
+            self.lbl_throttle.setToolTip("No clock throttling")
+        else:
+            self.lbl_throttle.setText("⚠")
+            self.lbl_throttle.setStyleSheet(
+                f"color:{t('warn')}; background:transparent;")
+            self.lbl_throttle.setToolTip(
+                ", ".join(self._throttle_reasons or []) or "throttled")
 
     def set_row_visible(self, key: str, visible: bool) -> None:
         """Show/hide one metric row (key: load, power, temp, mem, fan,
@@ -449,14 +535,7 @@ class GpuPanel(QFrame):
         if s.pcie_gen_current and s.pcie_width_current:
             self._bus_link = (
                 f"Gen {int(s.pcie_gen_current)} x{int(s.pcie_width_current)}")
-        reasons = [r for r in s.throttle_reasons if r != "GPU Idle"]
-        if s.is_throttled:
-            self.lbl_throttle.setText("⚠")
-            self.lbl_throttle.setStyleSheet(
-                "color:#fbbf24; background:transparent;")
-            self.lbl_throttle.setToolTip(", ".join(reasons) or "throttled")
-        else:
-            self.lbl_throttle.setText("●")
-            self.lbl_throttle.setStyleSheet(
-                "color:#34d399; background:transparent;")
-            self.lbl_throttle.setToolTip("No throttling")
+        self._throttle_reasons = (
+            [r for r in s.throttle_reasons if r != "GPU Idle"]
+            if s.is_throttled else None)
+        self._apply_throttle()

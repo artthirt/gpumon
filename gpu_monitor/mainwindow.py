@@ -8,13 +8,14 @@ from typing import Dict, List, Optional, Tuple
 
 from PySide6.QtCore import QByteArray, QSettings, Qt, Slot, QTimer
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFileDialog,
-                               QFrame, QGridLayout, QGroupBox, QHeaderView,
-                               QHBoxLayout, QLabel, QMainWindow, QPushButton,
-                               QScrollArea, QSizePolicy, QSplitter,
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog,
+                               QFileDialog, QFrame, QGridLayout, QGroupBox,
+                               QHeaderView, QHBoxLayout, QLabel, QMainWindow,
+                               QPushButton, QScrollArea, QSizePolicy, QSplitter,
                                QStatusBar, QTreeWidget, QTreeWidgetItem,
                                QVBoxLayout, QWidget)
 
+from . import theme
 from .cards import GpuCard, GpuPanel, fmt_mem
 from .charts import TimeSeriesChart
 from .collector import GpuSampler, PcieDmonSampler
@@ -61,8 +62,20 @@ class ControlsDialog(QDialog):
         v.setSpacing(10)
 
         row = QHBoxLayout()
+        lab = QLabel("Theme")
+        lab.setObjectName("dlgLabel")
+        self.cmb_theme = QComboBox()
+        self.cmb_theme.addItem("Dark", "dark")
+        self.cmb_theme.addItem("Light", "light")
+        self.cmb_theme.setToolTip(
+            "Application color scheme (dark or light). Saved between runs.")
+        row.addWidget(lab)
+        row.addWidget(self.cmb_theme, 1)
+        v.addLayout(row)
+
+        row = QHBoxLayout()
         lab = QLabel("Refresh interval")
-        lab.setStyleSheet("color:#8b98ad;")
+        lab.setObjectName("dlgLabel")
         self.cmb_interval = QComboBox()
         for ms, text in INTERVALS_MS:
             self.cmb_interval.addItem(text, ms)
@@ -75,7 +88,7 @@ class ControlsDialog(QDialog):
 
         row = QHBoxLayout()
         lab = QLabel("Timeline window")
-        lab.setStyleSheet("color:#8b98ad;")
+        lab.setObjectName("dlgLabel")
         self.cmb_window = QComboBox()
         for sec, text in WINDOWS_S:
             self.cmb_window.addItem(text, sec)
@@ -88,7 +101,7 @@ class ControlsDialog(QDialog):
 
         row = QHBoxLayout()
         lab = QLabel("Chart style")
-        lab.setStyleSheet("color:#8b98ad;")
+        lab.setObjectName("dlgLabel")
         self.cmb_chart_style = QComboBox()
         self.cmb_chart_style.addItem("Area (filled)", "area")
         self.cmb_chart_style.addItem("Line", "line")
@@ -166,14 +179,20 @@ class MainWindow(QMainWindow):
         splitter.setSizes([380, 920])
         root.addWidget(splitter, 1)
 
-        # compact-mode container: one GpuPanel per GPU, stacked in one column
+        # compact-mode container: one GpuPanel per GPU, stacked in one column;
+        # wrapped in a scroll area so it scrolls when rows don't fit
         self.compact_box = QWidget()
         self.compact_layout = QVBoxLayout(self.compact_box)
         self.compact_layout.setContentsMargins(2, 0, 2, 2)
         self.compact_layout.setSpacing(10)
         self.compact_layout.addStretch(1)
-        self.compact_box.hide()
-        root.addWidget(self.compact_box, 0)
+        self.compact_scroll = QScrollArea()
+        self.compact_scroll.setWidgetResizable(True)
+        self.compact_scroll.setFrameShape(QScrollArea.NoFrame)
+        self.compact_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.compact_scroll.setWidget(self.compact_box)
+        self.compact_scroll.hide()
+        root.addWidget(self.compact_scroll, 0)
 
         self.setCentralWidget(central)
 
@@ -199,6 +218,7 @@ class MainWindow(QMainWindow):
         self.dlg.cmb_window.currentIndexChanged.connect(self._on_window)
         self.dlg.cmb_chart_style.currentIndexChanged.connect(
             self._on_chart_style)
+        self.dlg.cmb_theme.currentIndexChanged.connect(self._on_theme)
         self.dlg.btn_pause.toggled.connect(self._on_pause)
         self.dlg.btn_export.clicked.connect(self._export_csv)
 
@@ -237,8 +257,8 @@ class MainWindow(QMainWindow):
         h.addWidget(self.btn_controls)
 
         sep = QFrame()
+        sep.setObjectName("sepV")
         sep.setFrameShape(QFrame.VLine)
-        sep.setStyleSheet("background:#2a3444; max-width:1px;")
         h.addSpacing(6)
         h.addWidget(sep)
 
@@ -468,20 +488,20 @@ class MainWindow(QMainWindow):
             self.btn_top.setText("📌")
             for i, s in sorted(self._last_snaps.items()):
                 self._ensure_row(i, s)
-            self.compact_box.show()
+            self.compact_scroll.show()
             self.updateGeometry()
             self._fit_compact()
-            self._save_state()
         else:
             self.lbl_info.setVisible(True)
             self.lbl_title.setText("⚡ GPU Monitor")
             self.btn_controls.setText("☰  Controls")
             self.btn_compact.setText("▭  Compact")
             self.btn_top.setText("📌  Top")
-            self.compact_box.hide()
+            self.compact_scroll.hide()
             self.splitter.show()
             if self._normal_geo is not None:
                 self.restoreGeometry(self._normal_geo)
+        if not self._restoring:
             self._save_state()
 
     def _fit_compact(self) -> None:
@@ -493,14 +513,19 @@ class MainWindow(QMainWindow):
         n = max(1, sum(1 for r in self._rows if r is not None))
         ph = max((r.sizeHint().height()
                   for r in self._rows if r is not None), default=300)
-        target = (GpuPanel.WIDTH + 60, n * (ph + 10) + 130)
+        target_h = n * (ph + 10) + 130
+        # cap at the available screen height: taller content scrolls instead
+        screen_h = self.screen().availableGeometry().height()
+        target_h = min(target_h, max(300, screen_h - 40))
+        target = (GpuPanel.WIDTH + 60, target_h)
         QTimer.singleShot(
             100, lambda: self._compact and self.resize(*target))
 
     def _on_top(self, on: bool) -> None:
         self.setWindowFlag(Qt.WindowStaysOnTopHint, on)
         self.show()
-        self._save_state()
+        if not self._restoring:
+            self._save_state()
 
     def _open_controls(self) -> None:
         self.dlg.show()
@@ -527,6 +552,22 @@ class MainWindow(QMainWindow):
         for row in self._rows:
             if row is not None:
                 row.set_spark_style(style)
+
+    def _on_theme(self, _idx: int) -> None:
+        """Switch the application color scheme."""
+        name = self.dlg.cmb_theme.currentData()
+        theme.apply(name)
+        QApplication.instance().setStyleSheet(theme.build_qss(name))
+        for c in self._cards:
+            if c is not None:
+                c.restyle()
+        for row in self._rows:
+            if row is not None:
+                row.restyle()
+        for ch in self._charts:
+            ch.update()
+        if not self._restoring:
+            self._save_state()
 
     @Slot(int)
     def _on_row_toggle(self, _state: int) -> None:
@@ -592,6 +633,7 @@ class MainWindow(QMainWindow):
         interval = int(s.value("settings/interval", 1))
         window = int(s.value("settings/window", 1))
         chart_style = int(s.value("settings/chart_style", 0))
+        theme_idx = int(s.value("settings/theme", 0))
         top = bool(s.value("settings/top", False))
         compact = bool(s.value("settings/compact", False))
         hidden = list(s.value("settings/compact_hidden", []) or [])
@@ -605,6 +647,7 @@ class MainWindow(QMainWindow):
         self.dlg.cmb_chart_style.setCurrentIndex(chart_style)
         self._restoring = True
         try:
+            self.dlg.cmb_theme.setCurrentIndex(theme_idx)
             self.dlg.set_row_visibility(
                 {k: k not in hidden for k in self.dlg.row_checks})
             if top:
@@ -623,6 +666,7 @@ class MainWindow(QMainWindow):
         s.setValue("settings/window", self.dlg.cmb_window.currentIndex())
         s.setValue("settings/chart_style",
                    self.dlg.cmb_chart_style.currentIndex())
+        s.setValue("settings/theme", self.dlg.cmb_theme.currentIndex())
         s.setValue("settings/top", self.btn_top.isChecked())
         s.setValue("settings/compact", self._compact)
         s.setValue("settings/compact_hidden",

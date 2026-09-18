@@ -19,6 +19,8 @@ from PySide6.QtGui import (QBrush, QColor, QFont, QLinearGradient, QPainter,
                            QPainterPath, QPen)
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
+from . import theme
+
 # how much history (seconds) to keep regardless of the visible window
 RETENTION_S = 3700.0
 
@@ -193,18 +195,18 @@ class TimeSeriesChart(QWidget):
         fb = QFont(f)
         fb.setBold(True)
         p.setFont(fb)
-        p.setPen(QColor("#e8edf5"))
+        p.setPen(QColor(theme.color("title")))
         p.drawText(QRectF(plot.left(), 6, 300, 16),
                    Qt.AlignLeft | Qt.AlignVCenter, self.title)
         p.setFont(f)
-        p.setPen(QColor("#7d8aa0"))
+        p.setPen(QColor(theme.color("muted3")))
         tx = plot.left() + p.fontMetrics().horizontalAdvance(self.title) + 10
         p.drawText(QRectF(tx, 6, 120, 16), Qt.AlignLeft | Qt.AlignVCenter,
                    self.unit)
 
         # --- plot background
-        p.setPen(QPen(QColor("#232c3a"), 1))
-        p.setBrush(QColor("#0b0f15"))
+        p.setPen(QPen(QColor(theme.color("chart_border")), 1))
+        p.setBrush(QColor(theme.color("chart_bg")))
         p.drawRoundedRect(plot.adjusted(0.5, 0.5, -0.5, -0.5), 8, 8)
 
         # --- horizontal grid + Y labels
@@ -212,9 +214,9 @@ class TimeSeriesChart(QWidget):
         for i in range(steps + 1):
             yv = y0 + (y1 - y0) * i / steps
             y = Y(yv)
-            p.setPen(QPen(QColor("#1e2735"), 1))
+            p.setPen(QPen(QColor(theme.color("grid")), 1))
             p.drawLine(QPointF(plot.left(), y), QPointF(plot.right(), y))
-            p.setPen(QColor("#7d8aa0"))
+            p.setPen(QColor(theme.color("muted3")))
             p.drawText(QRectF(plot.left() - 48, y - 8, 44, 16),
                        Qt.AlignRight | Qt.AlignVCenter, fmt_value(yv))
 
@@ -224,9 +226,9 @@ class TimeSeriesChart(QWidget):
         tt = math.ceil(t0 / step) * step
         while tt <= t1:
             x = X(tt)
-            p.setPen(QPen(QColor("#1e2735"), 1))
+            p.setPen(QPen(QColor(theme.color("grid")), 1))
             p.drawLine(QPointF(x, plot.bottom()), QPointF(x, plot.bottom() + 4))
-            p.setPen(QColor("#7d8aa0"))
+            p.setPen(QColor(theme.color("muted3")))
             p.drawText(QRectF(x - 32, plot.bottom() + 5, 64, 14),
                        Qt.AlignHCenter, time.strftime(fmt, time.localtime(tt)))
             tt += step
@@ -329,7 +331,7 @@ class TimeSeriesChart(QWidget):
         def Y(v: float) -> float:
             return plot.bottom() - (v - y0) / yspan * plot.height()
 
-        p.setPen(QPen(QColor("#93a1b8"), 1.0, Qt.DashLine))
+        p.setPen(QPen(QColor(theme.color("crosshair")), 1.0, Qt.DashLine))
         p.drawLine(QPointF(x, plot.top()), QPointF(x, plot.bottom()))
         for s, v in rows:
             if v is None:
@@ -349,17 +351,19 @@ class TimeSeriesChart(QWidget):
             bx = x - 12 - box_w
         by = hover_y + 14
         by = min(max(plot.top() + 6, by), plot.bottom() - box_h - 4)
-        p.setPen(QPen(QColor("#2c3648"), 1))
-        p.setBrush(QColor(17, 22, 30, 235))
+        p.setPen(QPen(QColor(theme.color("tip_border")), 1))
+        tip_bg = QColor(theme.color("tip_bg"))
+        tip_bg.setAlpha(235)
+        p.setBrush(tip_bg)
         p.drawRoundedRect(QRectF(bx, by, box_w, box_h), 7, 7)
         ty = by + 16
-        p.setPen(QColor("#8b98ad"))
+        p.setPen(QColor(theme.color("muted2")))
         p.drawText(QRectF(bx + 12, ty - 11, box_w - 24, 14), Qt.AlignLeft, lines[0])
         for (s, v), line in zip(rows, lines[1:]):
             p.setPen(Qt.NoPen)
             p.setBrush(QColor(s.color))
             p.drawRoundedRect(QRectF(bx + 12, ty - 3, 8, 8), 2, 2)
-            p.setPen(QColor("#dbe2ec"))
+            p.setPen(QColor(theme.color("tip_text")))
             p.drawText(QRectF(bx + 26, ty - 11, box_w - 38, 14), Qt.AlignLeft, line)
             ty += 16
 
@@ -377,12 +381,12 @@ class TimeSeriesChart(QWidget):
                 p.setPen(Qt.NoPen)
                 p.setBrush(QColor(s.color))
                 p.drawRoundedRect(swatch, 2, 2)
-                p.setPen(QColor("#c6cfdd"))
+                p.setPen(QColor(theme.color("legend_text")))
             else:
-                p.setPen(QPen(QColor("#4a5568"), 1))
-                p.setBrush(QColor("#2a3342"))
+                p.setPen(QPen(QColor(theme.color("legend_off")), 1))
+                p.setBrush(QColor(theme.color("legend_off_bg")))
                 p.drawRoundedRect(swatch, 2, 2)
-                p.setPen(QColor("#5b6678"))
+                p.setPen(QColor(theme.color("legend_off")))
             p.drawText(QRectF(x + 14, y - 8, w - 14, 17),
                        Qt.AlignLeft | Qt.AlignVCenter, s.label)
             x += w
@@ -460,7 +464,7 @@ class Sparkline(QWidget):
         pad = 3.0
         track = QRectF(0.5, 0.5, max(1.0, w - 1), max(1.0, h - 1))
         p.setPen(Qt.NoPen)
-        p.setBrush(QColor("#10151d"))
+        p.setBrush(QColor(theme.color("spark_track")))
         p.drawRoundedRect(track, 5, 5)
         if w < 24 or h < 12 or len(self._pts) < 2:
             p.end()
