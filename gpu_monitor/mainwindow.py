@@ -35,6 +35,20 @@ def _lighten(color_hex: str, factor: float = 1.7) -> str:
     return QColor.fromHsl(h, s, min(255, int(l * factor)), a).name()
 
 
+def _parse_bool(value: object) -> bool:
+    """Bool from a QSettings value.
+
+    PySide6 returns INI values as raw strings ('true'/'false'), and
+    bool('false') is True — which force-restored always-on-top and
+    compact mode on every start. Parse the text explicitly instead.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value != 0
+    return str(value).strip().lower() in ("1", "true", "yes")
+
+
 class ControlsDialog(QDialog):
     """Non-modal dialog holding the sampler/timeline/pause/export controls
     and the per-row visibility checkboxes for compact mode."""
@@ -162,7 +176,8 @@ class MainWindow(QMainWindow):
         self._meta: Optional[dict] = None
         self._last_status = ""
         self._compact = False
-        self._normal_geo = None
+        self._normal_geo: Optional[QByteArray] = None
+        self._compact_geo: Optional[QByteArray] = None
 
         central = QWidget()
         root = QVBoxLayout(central)
@@ -495,8 +510,16 @@ class MainWindow(QMainWindow):
                 self._ensure_row(i, s)
             self.compact_scroll.show()
             self.updateGeometry()
-            self._fit_compact()
+            # Restore the user's compact size when we have one; only
+            # auto-fit on the very first compact session.
+            if self._compact_geo is not None:
+                self.restoreGeometry(self._compact_geo)
+            else:
+                self._fit_compact()
         else:
+            # Capture the compact size BEFORE the expanded layout is shown —
+            # re-laying out the splitter may resize the window.
+            self._compact_geo = self.saveGeometry()
             self.lbl_info.setVisible(True)
             self.lbl_title.setText("⚡ GPU Monitor")
             self.btn_controls.setText("☰  Controls")
@@ -583,7 +606,8 @@ class MainWindow(QMainWindow):
         for row in self._rows:
             if row is not None:
                 row.apply_row_visibility(vis)
-        if self._compact:
+        # Re-fit only while we still don't have a user-chosen compact size.
+        if self._compact and self._compact_geo is None:
             self._fit_compact()
         self._save_state()
 
@@ -635,14 +659,19 @@ class MainWindow(QMainWindow):
                 if s.contains("window/geometry") else None)
         spl = (s.value("window/splitter", type=QByteArray)
                if s.contains("window/splitter") else None)
+        # Saved compact-mode window size (None until the user has exited
+        # compact mode at least once)
+        geom_c = (s.value("window/geometry_compact", type=QByteArray)
+                  if s.contains("window/geometry_compact") else None)
         interval = int(s.value("settings/interval", 1))
         window = int(s.value("settings/window", 1))
         chart_style = int(s.value("settings/chart_style", 0))
         theme_idx = int(s.value("settings/theme", 0))
-        top = bool(s.value("settings/top", False))
-        compact = bool(s.value("settings/compact", False))
+        top = _parse_bool(s.value("settings/top", False))
+        compact = _parse_bool(s.value("settings/compact", False))
         hidden = list(s.value("settings/compact_hidden", []) or [])
 
+        self._compact_geo = geom_c
         if geom is not None:
             self.restoreGeometry(geom)
         if spl is not None:
@@ -664,7 +693,20 @@ class MainWindow(QMainWindow):
 
     def _save_state(self) -> None:
         s = self._ini()
-        s.setValue("window/geometry", self.saveGeometry())
+        # window/geometry always holds the EXPANDED size: a fresh restore
+        # starts in the expanded layout, so saving the compact size here
+        # would make the expanded window come up at the compact size (and
+        # the compact size would be captured as the "normal" one, losing it).
+        if self._compact and self._normal_geo is not None:
+            s.setValue("window/geometry", self._normal_geo)
+        else:
+            s.setValue("window/geometry", self.saveGeometry())
+        if self._compact:
+            s.setValue("window/geometry_compact", self.saveGeometry())
+        elif self._compact_geo is not None:
+            s.setValue("window/geometry_compact", self._compact_geo)
+        else:
+            s.remove("window/geometry_compact")
         s.setValue("window/splitter", self.splitter.saveState())
         s.setValue("settings/interval",
                    self.dlg.cmb_interval.currentIndex())
