@@ -44,9 +44,9 @@ class ControlsDialog(QDialog):
         ("load", "GPU load"),
         ("power", "Power"),
         ("temp", "Temperature"),
+        ("temp_mem", "Mem temp"),
         ("mem", "Video memory"),
         ("fan", "Fan"),
-        ("temp_mem", "Mem temp"),
         ("clk_sm", "SM clock"),
         ("clk_mem", "Mem clock"),
         ("bus", "Bus (PCIe)"),
@@ -333,7 +333,7 @@ class MainWindow(QMainWindow):
             (self.chart_power,
              "Instantaneous power draw in watts."),
             (self.chart_temp,
-             "GPU core (die) temperature in °C."),
+             "GPU core (die) and memory (VRAM) temperatures in °C."),
             (self.chart_mem,
              "VRAM in use in MiB; the dashed line marks total memory."),
             (self.chart_clock,
@@ -380,7 +380,9 @@ class MainWindow(QMainWindow):
 
             self.chart_util.push(s.timestamp, {f"u{i}": s.util_gpu})
             self.chart_power.push(s.timestamp, {f"p{i}": s.power_draw})
-            self.chart_temp.push(s.timestamp, {f"t{i}": s.temp_gpu})
+            self.chart_temp.push(
+                s.timestamp,
+                {f"t{i}": s.temp_gpu, f"tm{i}": s.temp_mem})
             self.chart_mem.push(s.timestamp, {f"m{i}": s.mem_used})
             self.chart_clock.push(s.timestamp, {
                 f"c{i}g": s.clock_graphics, f"c{i}m": s.clock_mem})
@@ -412,6 +414,8 @@ class MainWindow(QMainWindow):
                 f"p{i}", s.power_limit, f"limit {s.power_limit:.0f} W")
 
         self.chart_temp.add_series(f"t{i}", f"GPU {i}", color)
+        self.chart_temp.add_series(
+            f"tm{i}", f"GPU {i} · MEM", _lighten(color))
 
         self.chart_mem.add_series(f"m{i}", f"GPU {i}", color)
         if s.mem_total:
@@ -456,11 +460,12 @@ class MainWindow(QMainWindow):
         color = GPU_COLORS[i % len(GPU_COLORS)]
         row = GpuPanel(color)
         row.set_limits(s.power_limit, s.mem_total)
-        # clock sparklines seed from the big Clocks chart (SM ≈ graphics
-        # clock); fan / mem temp have no big-chart history
+        # sparklines seed from the big charts (SM ≈ graphics clock);
+        # only fan has no big-chart history
         for spark, key in ((row.spark_load, f"u{i}"),
                            (row.spark_power, f"p{i}"),
                            (row.spark_temp, f"t{i}"),
+                           (row.spark_temp_mem, f"tm{i}"),
                            (row.spark_mem, f"m{i}"),
                            (row.spark_clk_sm, f"c{i}g"),
                            (row.spark_clk_mem, f"c{i}m")):

@@ -13,7 +13,7 @@ No external charting library is used: the timeline widget is a hand-rolled
 - **Timeline charts** (sliding window 1 min – 1 hour):
   - GPU load (%)
   - Power draw (W) with each card's **power limit** as a dashed reference line
-  - Temperature (°C)
+  - Temperature (°C): GPU core **and** memory (VRAM) per GPU
   - VRAM used (MiB) with each card's **memory total** as a reference line
   - Clocks (SM / memory, MHz)
   - Clickable legend (toggle any series), hover crosshair + tooltip,
@@ -25,7 +25,7 @@ No external charting library is used: the timeline widget is a hand-rolled
   context on a GPU
 - **Compact mode** (▭ Compact toggle): one vertical panel per GPU —
   name, P-state and throttle status on top, then GPU load, power,
-  temperature, VRAM, fan speed, memory temperature, SM clock, memory clock
+  temperature, memory temperature, VRAM, fan speed, SM clock, memory clock
   and PCIe bus throughput stacked one below the other, each value above a
   small inline sparkline (30 px) that follows the chosen timeline window.
   No cards, charts or process table; the window shrinks to fit.
@@ -75,6 +75,13 @@ second, continuous `nvidia-smi dmon -s t -d 1` process for it (1 sample per
 second, independent of the main refresh interval; paused together with the
 main sampler). If `dmon` is unavailable on a given system the row simply
 stays empty.
+
+**Memory temperature** (`temperature.memory`) is reported as `N/A` by
+`nvidia-smi`/NVML on most cards, so the app falls back to NVAPI's internal
+`NvAPI_GPU_ThermalGetSensors` (via `ctypes`, bindings mirroring
+LibreHardwareMonitor) and picks the VRAM slot per card generation
+(50xx: idx 2, 40xx: idx 7, older: idx 9). If the card/driver exposes no
+usable VRAM sensor the row stays `—`.
 
 ## Requirements
 

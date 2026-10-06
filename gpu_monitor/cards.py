@@ -359,6 +359,7 @@ class GpuPanel(QFrame):
         self.spark_load = Sparkline(accent, y_max=100.0)
         self.spark_power = Sparkline("#fbbf24")
         self.spark_temp = Sparkline("#fb7185")
+        self.spark_temp_mem = Sparkline("#f97316")
         self.spark_mem = Sparkline("#a78bfa")
 
         self.lbl_load = self._metric(v, "GPU load", self.spark_load,
@@ -369,21 +370,21 @@ class GpuPanel(QFrame):
             "active power limit.", key="power")
         self.lbl_temp = self._metric(v, "Temperature", self.spark_temp,
             "GPU core (die) temperature in °C.", key="temp")
+        self.lbl_temp_mem = self._metric(v, "Mem temp", self.spark_temp_mem,
+            "Memory (VRAM) temperature in °C. Read via NVAPI when "
+            "nvidia-smi reports it as N/A; not available on all "
+            "drivers/cards.", key="temp_mem")
         self.lbl_mem = self._metric(v, "Video memory", self.spark_mem,
             "VRAM currently in use; the dashed line marks the total "
             "memory.", key="mem")
 
         self.spark_fan = Sparkline("#34d399", y_max=100.0)
-        self.spark_temp_mem = Sparkline("#f97316")
         self.spark_clk_sm = Sparkline("#22d3ee")
         self.spark_clk_mem = Sparkline("#e879f9")
 
         self.lbl_fan = self._metric(v, "Fan", self.spark_fan,
             "Fan speed as a percentage of maximum RPM. May be — if the "
             "card reports no fan sensor.", key="fan")
-        self.lbl_temp_mem = self._metric(v, "Mem temp", self.spark_temp_mem,
-            "Memory (VRAM) temperature in °C. Not reported by all "
-            "drivers/cards.", key="temp_mem")
         self.lbl_clk_sm = self._metric(v, "SM clock", self.spark_clk_sm,
             "Current SM / graphics core clock in MHz.", key="clk_sm")
         self.lbl_clk_mem = self._metric(v, "Mem clock", self.spark_clk_mem,

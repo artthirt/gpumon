@@ -18,6 +18,7 @@ from typing import List, Optional
 
 from PySide6.QtCore import QThread, Signal
 
+from . import nvapi_temp
 from .model import GpuSnapshot, decode_throttle
 
 # (GpuSnapshot attribute, nvidia-smi query field)
@@ -153,7 +154,41 @@ def query_gpus(smi_path: str) -> List[GpuSnapshot]:
                 setattr(snap, attr, _num_or_none(raw))
         snap.throttle_reasons = decode_throttle(snap.throttle_bits)
         snaps.append(snap)
+    _fill_mem_temps_nvapi(snaps)
     return snaps
+
+
+def _bus_from_smi(bus_id: str) -> Optional[int]:
+    """PCI bus number from an smi-format id like '00000000:01:00.0'."""
+    parts = (bus_id or "").split(":")
+    if len(parts) < 2:
+        return None
+    try:
+        return int(parts[1], 16)
+    except ValueError:
+        return None
+
+
+def _fill_mem_temps_nvapi(snaps: List[GpuSnapshot]) -> None:
+    """Fill in temp_mem via NVAPI where nvidia-smi reports [N/A].
+
+    NVAPI's internal thermal-sensor API exposes the VRAM temperature on
+    cards where NVML/sm-i don't (see nvapi_temp module).  Failures are
+    silent: the value simply stays None.
+    """
+    missing = [s for s in snaps
+               if s.temp_mem is None and _bus_from_smi(s.bus_id) is not None]
+    if not missing:
+        return
+    name_by_bus = {_bus_from_smi(s.bus_id): s.name for s in missing}
+    try:
+        temps = nvapi_temp.memory_temps_by_bus_id(name_by_bus)
+    except Exception:
+        return
+    for s in missing:
+        t = temps.get(_bus_from_smi(s.bus_id))
+        if t is not None:
+            s.temp_mem = t
 
 
 def _num_or_none(text: str):
